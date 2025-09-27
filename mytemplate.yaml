@@ -1,0 +1,73 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "Stack that will set up a Linux EC2 instance and reference the sample network stack"
+
+Parameters:
+  TagValue:
+    Description: "Tag value for the Name key"
+    Type: String
+    Default: "tobi bello"
+
+  InstanceType:
+    Description: "EC2 instance type"
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.nano
+      - t3.micro
+      - t3.small
+      - t3.medium
+      - t3.large
+
+Mappings:
+  RegionMap:
+    us-east-1:
+      AMI: ami-08982f1c5bf93d976
+    us-west-1:
+      AMI: ami-00142eb1747a493d9
+    us-east-2:
+      AMI: ami-0ca4d5db4872d0c28
+    us-west-2:
+      AMI: ami-06a974f9b8a97ecf2
+    ca-central-1:
+      AMI: ami-00959a3c022b1cc1e
+
+Resources:
+  MyEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !FindInMap [ RegionMap, !Ref AWS::Region, AMI ]
+      SecurityGroupIds:
+        - !ImportValue sampleNetworkCrossStack-SecurityGroupID
+      SubnetId: !ImportValue sampleNetworkCrossStack-SubnetID
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          yum install -y httpd
+          systemctl start httpd
+          systemctl enable httpd
+          echo "Cross Stack performed by tobi" > /var/www/html/index.html
+      Tags:
+        - Key: Name
+          Value: !Ref TagValue
+
+  MyEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  MyEIPAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      InstanceId: !Ref MyEC2Instance
+      AllocationId: !GetAtt [ MyEIP, AllocationId ]
+
+Outputs:
+  PrivateIPv4Address:
+    Description: "Private IPv4 address of the instance"
+    Value: !GetAtt [ MyEC2Instance, PrivateIp ]
+
+  PrivateDNSName:
+    Description: "Private DNS name of the instance"
+    Value: !GetAtt [ MyEC2Instance, PrivateDnsName ]
